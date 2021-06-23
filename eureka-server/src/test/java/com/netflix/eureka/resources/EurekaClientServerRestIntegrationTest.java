@@ -219,7 +219,8 @@ public class EurekaClientServerRestIntegrationTest {
         System.setProperty("eureka.port", "8080");
         System.setProperty("eureka.preferSameZone", "false");
         System.setProperty("eureka.shouldUseDns", "false");
-        System.setProperty("eureka.shouldFetchRegistry", "false");
+        System.setProperty("eureka.shouldFetchRegistry", "true");// KLH: 测试抓取注册表
+//        System.setProperty("eureka.shouldFetchRegistry", "false");
         System.setProperty("eureka.serviceUrl.defaultZone", myServiceUrl);
         System.setProperty("eureka.serviceUrl.default.defaultZone", myServiceUrl);
         System.setProperty("eureka.awsAccessId", "fake_aws_access_id");
@@ -232,8 +233,10 @@ public class EurekaClientServerRestIntegrationTest {
     }
 
     private static void startServer() throws Exception {
+/*        // KLH: 找war包
         File warFile = findWar();
 
+        // KLH: 声明jetty容器并启动
         server = new Server(8080);
 
         WebAppContext webapp = new WebAppContext();
@@ -243,7 +246,21 @@ public class EurekaClientServerRestIntegrationTest {
 
         server.start();
 
+        eurekaServiceUrl = "http://localhost:8080/v2";*/
+
+        server = new Server(8080);
+
+        // KLH: 其他资料里这里的文件路径都写错了,真坑
+        WebAppContext webAppCtx = new WebAppContext(new File("./src/main/webapp").getAbsolutePath(), "/");
+        webAppCtx.setDescriptor(new File("./src/main/webapp/WEB-INF/web.xml").getAbsolutePath());
+        webAppCtx.setResourceBase(new File("./src/main/resources").getAbsolutePath());
+        webAppCtx.setClassLoader(Thread.currentThread().getContextClassLoader());
+        server.setHandler(webAppCtx);
+        server.start();
+
         eurekaServiceUrl = "http://localhost:8080/v2";
+
+//        Thread.sleep(1000000);
     }
 
     private static File findWar() {

@@ -4,10 +4,12 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://java.sun.com/xml/ns/javaee
 	http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd">
+  <!--klh 初始化监听器-->
   <listener>
     <listener-class>com.netflix.eureka.EurekaBootStrap</listener-class>
   </listener>
 
+  <!--klh 四个过滤器-->
   <filter>
     <filter-name>statusFilter</filter-name>
     <filter-class>com.netflix.eureka.StatusFilter</filter-class>
@@ -59,6 +61,7 @@
     <url-pattern>/*</url-pattern>
   </filter-mapping>
 
+  <!--klh 默认不开启限流-->
   <!-- Uncomment this to enable rate limiter filter.
   <filter-mapping>
     <filter-name>rateLimitingFilter</filter-name>

@@ -115,7 +115,7 @@ public class ResponseCacheImpl implements ResponseCache {
     private final ConcurrentMap<Key, Value> readOnlyCacheMap = new ConcurrentHashMap<Key, Value>();
 
     private final LoadingCache<Key, Value> readWriteCacheMap;
-    private final boolean shouldUseReadOnlyResponseCache;
+    private final boolean shouldUseReadOnlyResponseCache;// KLH: 默认值true
     private final AbstractInstanceRegistry registry;
     private final EurekaServerConfig serverConfig;
     private final ServerCodecs serverCodecs;
@@ -127,6 +127,7 @@ public class ResponseCacheImpl implements ResponseCache {
         this.registry = registry;
 
         long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
+        // KLH: 读写缓存唯一一处赋值
         this.readWriteCacheMap =
                 CacheBuilder.newBuilder().initialCapacity(1000)
                         .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)
@@ -341,17 +342,20 @@ public class ResponseCacheImpl implements ResponseCache {
      * Get the payload in both compressed and uncompressed form.
      */
     @VisibleForTesting
-    Value getValue(final Key key, boolean useReadOnlyCache) {
+    Value getValue(final Key key, boolean useReadOnlyCache) {// KLH: useReadOnlyCache默认为true
         Value payload = null;
         try {
             if (useReadOnlyCache) {
+                // KLH: 优先从读写缓存中获取<1>
                 final Value currentPayload = readOnlyCacheMap.get(key);
                 if (currentPayload != null) {
                     payload = currentPayload;
+                    // KLH: 只读缓存为空,则从读写缓存中获取,并将读写缓存中的值更新到只读缓存中<2>
                 } else {
                     payload = readWriteCacheMap.get(key);
                     readOnlyCacheMap.put(key, payload);
                 }
+                // KLH: useReadOnlyCache参数为false,越过只读缓存,直接从读写缓存中获取<3>
             } else {
                 payload = readWriteCacheMap.get(key);
             }

@@ -25,7 +25,7 @@ import com.netflix.eureka.registry.AbstractInstanceRegistry;
  *
  * If a lease elapses without renewals, it will eventually expire consequently
  * marking the associated {@link T} for immediate eviction - this is similar to
- * an explicit cancellation except that there is no communication between the
+ * an explicit cancellation except that there is no communication    between the
  * {@link T} and {@link LeaseManager}.
  *
  * @author Karthik Ranganathan, Greg Kim
@@ -61,7 +61,6 @@ public class Lease<T> {
      */
     public void renew() {
         lastUpdateTimestamp = System.currentTimeMillis() + duration;
-
     }
 
     /**
@@ -104,11 +103,13 @@ public class Lease<T> {
      * what it should be, the expiry will actually be 2 * duration. This is a minor bug and should only affect
      * instances that ungracefully shutdown. Due to possible wide ranging impact to existing usage, this will
      * not be fixed.
+     * // KLH: 这有个源码的bug?
      *
      * @param additionalLeaseMs any additional lease time to add to the lease evaluation in ms.
      */
     public boolean isExpired(long additionalLeaseMs) {
-        return (evictionTimestamp > 0 || System.currentTimeMillis() > (lastUpdateTimestamp + duration + additionalLeaseMs));
+        return (evictionTimestamp > 0 ||
+                System.currentTimeMillis() > (lastUpdateTimestamp + duration + additionalLeaseMs));
     }
 
     /**
@@ -123,6 +124,7 @@ public class Lease<T> {
     /**
      * Gets the milliseconds since epoch when the lease was last renewed.
      * Note that the value returned here is actually not the last lease renewal time but the renewal + duration.
+     * // KLH: "所谓的上次续约时间",这里eureka写了个bug,续约时更新这个时间的时候,加上了duration 默认90s,实际上不需要加,注释里有说明
      *
      * @return the milliseconds since epoch when the lease was last renewed.
      */

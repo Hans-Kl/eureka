@@ -110,7 +110,9 @@ public class EurekaBootStrap implements ServletContextListener {
     @Override
     public void contextInitialized(ServletContextEvent event) {
         try {
+            // KLH: 初始化datacenter和环境,将这两个配置放置到统一的ConfigurationManager中
             initEurekaEnvironment();
+
             initEurekaServerContext();
 
             ServletContext sc = event.getServletContext();
@@ -127,6 +129,8 @@ public class EurekaBootStrap implements ServletContextListener {
     protected void initEurekaEnvironment() throws Exception {
         logger.info("Setting the eureka configuration..");
 
+        // KLH: 创建配置管理器并初始化datacenter (volatile双检锁单例模式)
+        //  这里的源码也侧面告诉我们,配置管理器是单例模式的一个典型应用
         String dataCenter = ConfigurationManager.getConfigInstance().getString(EUREKA_DATACENTER);
         if (dataCenter == null) {
             logger.info("Eureka data center value eureka.datacenter is not set, defaulting to default");
@@ -134,6 +138,7 @@ public class EurekaBootStrap implements ServletContextListener {
         } else {
             ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_DATACENTER, dataCenter);
         }
+        // KLH: 初始化环境
         String environment = ConfigurationManager.getConfigInstance().getString(EUREKA_ENVIRONMENT);
         if (environment == null) {
             ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_ENVIRONMENT, TEST);
@@ -145,6 +150,8 @@ public class EurekaBootStrap implements ServletContextListener {
      * init hook for server context. Override for custom logic.
      */
     protected void initEurekaServerContext() throws Exception {
+        // KLH: 1. 读取eureka-server.properties文件中的配置
+        // KLH: EurekaServerConfig提供了配置管理类的另一种思路:**面向接口**;并且实现类中,配置全部提供了默认值(包括续约间隔 等重要配置)
         EurekaServerConfig eurekaServerConfig = new DefaultEurekaServerConfig();
 
         // For backward compatibility
@@ -157,20 +164,27 @@ public class EurekaBootStrap implements ServletContextListener {
 
         ApplicationInfoManager applicationInfoManager = null;
 
+        // KLH: 2. 构造一个 eurekaServer 内部的eurekaClient对象,用来跟其他 server 节点互相注册和通信
         if (eurekaClient == null) {
+            // KLH: instanceConfig对象是eureka-client.properties配置文件中的配置承载对象
             EurekaInstanceConfig instanceConfig = isCloud(ConfigurationManager.getDeploymentContext())
                     ? new CloudInstanceConfig()
                     : new MyDataCenterInstanceConfig();
-            
+
+            // KLH: 将instanceConfig和instanceInfo保存进applicationInfoManager
             applicationInfoManager = new ApplicationInfoManager(
-                    instanceConfig, new EurekaConfigBasedInstanceInfoProvider(instanceConfig).get());
-            
+                    instanceConfig,
+                    // KLH: **builder模式构造instanceInfo,instanceInfo包括租约等信息**
+                    new EurekaConfigBasedInstanceInfoProvider(instanceConfig).get());
+            // KLH: 读取eureka-client.properties配置文件作为 eurekaClient的配置
             EurekaClientConfig eurekaClientConfig = new DefaultEurekaClientConfig();
+            // KLH: 将自己也作为 eureka 客户端,实例化 eurekaClient 对象(非常复杂)
             eurekaClient = new DiscoveryClient(applicationInfoManager, eurekaClientConfig);
         } else {
             applicationInfoManager = eurekaClient.getApplicationInfoManager();
         }
 
+        // KLH: 3. 构造 能感知集群的服务实例注册表
         PeerAwareInstanceRegistry registry;
         if (isAws(applicationInfoManager.getInfo())) {
             registry = new AwsInstanceRegistry(
@@ -190,6 +204,7 @@ public class EurekaBootStrap implements ServletContextListener {
             );
         }
 
+        // KLH: 4. 构造了一个东西:peerEurekaNodes
         PeerEurekaNodes peerEurekaNodes = getPeerEurekaNodes(
                 registry,
                 eurekaServerConfig,
@@ -198,6 +213,7 @@ public class EurekaBootStrap implements ServletContextListener {
                 applicationInfoManager
         );
 
+        // KLH: 5. 基于上文中的关键对象,构造了 eureka 服务器上下文信息
         serverContext = new DefaultEurekaServerContext(
                 eurekaServerConfig,
                 serverCodecs,
@@ -206,16 +222,21 @@ public class EurekaBootStrap implements ServletContextListener {
                 applicationInfoManager
         );
 
+        // KLH: 将 context 放入 holder 中,后续使用 context 时,直接从 holder中获取
         EurekaServerContextHolder.initialize(serverContext);
 
+        // KLH: 6. 初始化上下文*重要*
         serverContext.initialize();
         logger.info("Initialized server context");
 
         // Copy registry from neighboring eureka node
+        // KLH: 7. 从邻近的 eureka 节点中拷贝注册表,如果失败,找下一个
         int registryCount = registry.syncUp();
+        // KLH: 8. 定时剔除失效服务
         registry.openForTraffic(applicationInfoManager, registryCount);
 
         // Register all monitoring statistics.
+        // KLH: 注册监控项
         EurekaMonitors.registerAllStats();
     }
     

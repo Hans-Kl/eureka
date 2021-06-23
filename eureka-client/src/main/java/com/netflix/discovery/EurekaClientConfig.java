@@ -440,6 +440,7 @@ public interface EurekaClientConfig {
 
     /**
      * Indicates whether this client should fetch eureka registry information from eureka server.
+     * klh 标识是否当前客户端应该从 eureka 服务端拉取注册表信息
      *
      * @return {@code true} if registry information has to be fetched, {@code false} otherwise.
      */

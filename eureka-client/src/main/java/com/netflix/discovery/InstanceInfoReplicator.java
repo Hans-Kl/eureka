@@ -59,10 +59,31 @@ class InstanceInfoReplicator implements Runnable {
         logger.info("InstanceInfoReplicator onDemand update allowed rate per min is {}", allowedRatePerMinute);
     }
 
+    // KLH: 默认参数initialDelayMs = 40
     public void start(int initialDelayMs) {
         if (started.compareAndSet(false, true)) {
             instanceInfo.setIsDirty();  // for initial register
+            // KLH: 调度线程池执行本类 run 方法
             Future next = scheduler.schedule(this, initialDelayMs, TimeUnit.SECONDS);
+            scheduledPeriodicRef.set(next);
+        }
+    }
+
+    public void run() {
+        try {
+            // KLH: 刷新服务实例信息
+            discoveryClient.refreshInstanceInfo();
+
+            Long dirtyTimestamp = instanceInfo.isDirtyWithTime();
+            if (dirtyTimestamp != null) {
+                // KLH: 服务注册!
+                discoveryClient.register();
+                instanceInfo.unsetIsDirty(dirtyTimestamp);
+            }
+        } catch (Throwable t) {
+            logger.warn("There was a problem with the instance info replicator", t);
+        } finally {
+            Future next = scheduler.schedule(this, replicationIntervalSeconds, TimeUnit.SECONDS);
             scheduledPeriodicRef.set(next);
         }
     }
@@ -97,23 +118,6 @@ class InstanceInfoReplicator implements Runnable {
         } else {
             logger.warn("Ignoring onDemand update due to rate limiter");
             return false;
-        }
-    }
-
-    public void run() {
-        try {
-            discoveryClient.refreshInstanceInfo();
-
-            Long dirtyTimestamp = instanceInfo.isDirtyWithTime();
-            if (dirtyTimestamp != null) {
-                discoveryClient.register();
-                instanceInfo.unsetIsDirty(dirtyTimestamp);
-            }
-        } catch (Throwable t) {
-            logger.warn("There was a problem with the instance info replicator", t);
-        } finally {
-            Future next = scheduler.schedule(this, replicationIntervalSeconds, TimeUnit.SECONDS);
-            scheduledPeriodicRef.set(next);
         }
     }
 

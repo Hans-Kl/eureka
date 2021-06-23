@@ -48,6 +48,7 @@ import static com.netflix.appinfo.PropertyBasedInstanceConfigConstants.*;
  * @author Karthik Ranganathan
  *
  */
+// KLH: 构造方法中读取eureka-client.properties配置文件
 public abstract class PropertiesInstanceConfig extends AbstractInstanceConfig implements EurekaInstanceConfig {
 
     protected final String namespace;
