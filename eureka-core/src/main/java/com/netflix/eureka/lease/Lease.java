@@ -103,13 +103,16 @@ public class Lease<T> {
      * what it should be, the expiry will actually be 2 * duration. This is a minor bug and should only affect
      * instances that ungracefully shutdown. Due to possible wide ranging impact to existing usage, this will
      * not be fixed.
-     * // KLH: 这有个源码的bug?
+     * <p> KLH: eureka官方:这有个bug,但我们不打算修复了,因为影响面太大
      *
      * @param additionalLeaseMs any additional lease time to add to the lease evaluation in ms.
      */
     public boolean isExpired(long additionalLeaseMs) {
         return (evictionTimestamp > 0 ||
-                System.currentTimeMillis() > (lastUpdateTimestamp + duration + additionalLeaseMs));
+                System.currentTimeMillis() >
+                        (lastUpdateTimestamp
+                                + duration
+                                + additionalLeaseMs));
     }
 
     /**

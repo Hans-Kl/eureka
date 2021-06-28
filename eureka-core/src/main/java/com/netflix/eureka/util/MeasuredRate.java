@@ -59,7 +59,7 @@ public class MeasuredRate {
                         logger.error("Cannot reset the Measured Rate", e);
                     }
                 }
-            }, sampleInterval, sampleInterval);
+            }, sampleInterval, sampleInterval);// KLH: 默认60s
 
             isActive = true;
         }

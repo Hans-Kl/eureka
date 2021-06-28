@@ -61,9 +61,9 @@ public class DefaultEurekaServerContext implements EurekaServerContext {
     @Override
     public void initialize() throws Exception {
         logger.info("Initializing ...");
-        // KLH: 启动 eureka server 集群
+        // KLH: 维护集群内的节点信息,每隔10min更新一次
         peerEurekaNodes.start();
-        // KLH: 通过 server 集群信息,初始化注册表
+        // KLH: 通过 server 集群信息,初始化调度任务,定时统计心跳数和实例数
         registry.init(peerEurekaNodes);
         logger.info("Initialized");
     }

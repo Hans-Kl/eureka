@@ -115,6 +115,7 @@ public class ResponseCacheImpl implements ResponseCache {
     private final ConcurrentMap<Key, Value> readOnlyCacheMap = new ConcurrentHashMap<Key, Value>();
 
     private final LoadingCache<Key, Value> readWriteCacheMap;
+
     private final boolean shouldUseReadOnlyResponseCache;// KLH: 默认值true
     private final AbstractInstanceRegistry registry;
     private final EurekaServerConfig serverConfig;
@@ -127,13 +128,13 @@ public class ResponseCacheImpl implements ResponseCache {
         this.registry = registry;
 
         long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
-        // KLH: 读写缓存唯一一处赋值
+        // KLH: 读写缓存
         this.readWriteCacheMap =
-                CacheBuilder.newBuilder().initialCapacity(1000)
-                        .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)
+                CacheBuilder.newBuilder().initialCapacity(1000)// KLH: 容量是1000
+                        .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)// KLH: 默认180s之后过期
                         .removalListener(new RemovalListener<Key, Value>() {
                             @Override
-                            public void onRemoval(RemovalNotification<Key, Value> notification) {
+                            public void onRemoval(RemovalNotification<Key, Value> notification) {// KLH: 缓存移除时触发的监听器
                                 Key removedKey = notification.getKey();
                                 if (removedKey.hasRegions()) {
                                     Key cloneWithNoRegions = removedKey.cloneWithoutRegions();
@@ -143,7 +144,7 @@ public class ResponseCacheImpl implements ResponseCache {
                         })
                         .build(new CacheLoader<Key, Value>() {
                             @Override
-                            public Value load(Key key) throws Exception {
+                            public Value load(Key key) throws Exception {// KLH: 缓存为空时的build策略
                                 if (key.hasRegions()) {
                                     Key cloneWithNoRegions = key.cloneWithoutRegions();
                                     regionSpecificKeys.put(cloneWithNoRegions, key);
@@ -153,6 +154,7 @@ public class ResponseCacheImpl implements ResponseCache {
                             }
                         });
 
+        // KLH: 定时对比只读缓存和读写缓存
         if (shouldUseReadOnlyResponseCache) {
             timer.schedule(getCacheUpdateTask(),
                     new Date(((System.currentTimeMillis() / responseCacheUpdateIntervalMs) * responseCacheUpdateIntervalMs)
@@ -346,16 +348,16 @@ public class ResponseCacheImpl implements ResponseCache {
         Value payload = null;
         try {
             if (useReadOnlyCache) {
-                // KLH: 优先从读写缓存中获取<1>
+                // KLH: 优先从读写缓存中获取
                 final Value currentPayload = readOnlyCacheMap.get(key);
                 if (currentPayload != null) {
                     payload = currentPayload;
-                    // KLH: 只读缓存为空,则从读写缓存中获取,并将读写缓存中的值更新到只读缓存中<2>
+                    // KLH: 只读缓存为空,则从读写缓存中获取,并将读写缓存中的值更新到只读缓存中
                 } else {
                     payload = readWriteCacheMap.get(key);
                     readOnlyCacheMap.put(key, payload);
                 }
-                // KLH: useReadOnlyCache参数为false,越过只读缓存,直接从读写缓存中获取<3>
+                // KLH: useReadOnlyCache参数为false,越过只读缓存,直接从读写缓存中获取
             } else {
                 payload = readWriteCacheMap.get(key);
             }
@@ -411,7 +413,7 @@ public class ResponseCacheImpl implements ResponseCache {
                 case Application:
                     boolean isRemoteRegionRequested = key.hasRegions();
 
-                    if (ALL_APPS.equals(key.getName())) {
+                    if (ALL_APPS.equals(key.getName())) {// KLH: 全量缓存
                         if (isRemoteRegionRequested) {
                             tracer = serializeAllAppsWithRemoteRegionTimer.start();
                             payload = getPayLoad(key, registry.getApplicationsFromMultipleRegions(key.getRegions()));
@@ -419,7 +421,7 @@ public class ResponseCacheImpl implements ResponseCache {
                             tracer = serializeAllAppsTimer.start();
                             payload = getPayLoad(key, registry.getApplications());
                         }
-                    } else if (ALL_APPS_DELTA.equals(key.getName())) {
+                    } else if (ALL_APPS_DELTA.equals(key.getName())) {// KLH: 增量缓存
                         if (isRemoteRegionRequested) {
                             tracer = serializeDeltaAppsWithRemoteRegionTimer.start();
                             versionDeltaWithRegions.incrementAndGet();

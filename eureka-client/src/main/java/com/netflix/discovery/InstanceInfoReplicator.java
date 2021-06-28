@@ -62,6 +62,7 @@ class InstanceInfoReplicator implements Runnable {
     // KLH: 默认参数initialDelayMs = 40
     public void start(int initialDelayMs) {
         if (started.compareAndSet(false, true)) {
+            // KLH: 第一次注册,设置dirty
             instanceInfo.setIsDirty();  // for initial register
             // KLH: 调度线程池执行本类 run 方法
             Future next = scheduler.schedule(this, initialDelayMs, TimeUnit.SECONDS);
@@ -71,7 +72,7 @@ class InstanceInfoReplicator implements Runnable {
 
     public void run() {
         try {
-            // KLH: 刷新服务实例信息
+            // KLH: 刷新服务实例信息,略过
             discoveryClient.refreshInstanceInfo();
 
             Long dirtyTimestamp = instanceInfo.isDirtyWithTime();
@@ -83,6 +84,7 @@ class InstanceInfoReplicator implements Runnable {
         } catch (Throwable t) {
             logger.warn("There was a problem with the instance info replicator", t);
         } finally {
+            // KLH: 循环调度
             Future next = scheduler.schedule(this, replicationIntervalSeconds, TimeUnit.SECONDS);
             scheduledPeriodicRef.set(next);
         }

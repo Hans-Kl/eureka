@@ -110,11 +110,14 @@ public class EurekaBootStrap implements ServletContextListener {
     @Override
     public void contextInitialized(ServletContextEvent event) {
         try {
-            // KLH: 初始化datacenter和环境,将这两个配置放置到统一的ConfigurationManager中
+            // KLH: 1. 初始化datacenter和环境,将这两个配置放入ConfigurationManager中,
+            //  ConfigurationManager是eureka使用的统一管理配置的工具
             initEurekaEnvironment();
 
+            // KLH: 2. 初始化eureka-server上下文,主要逻辑在这里
             initEurekaServerContext();
 
+            // KLH: 3. 将初始化好的 eureka-server上下文 放入servletContext中
             ServletContext sc = event.getServletContext();
             sc.setAttribute(EurekaServerContext.class.getName(), serverContext);
         } catch (Throwable e) {
@@ -130,7 +133,7 @@ public class EurekaBootStrap implements ServletContextListener {
         logger.info("Setting the eureka configuration..");
 
         // KLH: 创建配置管理器并初始化datacenter (volatile双检锁单例模式)
-        //  这里的源码也侧面告诉我们,配置管理器是单例模式的一个典型应用
+        //  这里的源码也侧面告诉我们,"配置管理器" 是单例模式的一个典型应用
         String dataCenter = ConfigurationManager.getConfigInstance().getString(EUREKA_DATACENTER);
         if (dataCenter == null) {
             logger.info("Eureka data center value eureka.datacenter is not set, defaulting to default");
@@ -164,7 +167,7 @@ public class EurekaBootStrap implements ServletContextListener {
 
         ApplicationInfoManager applicationInfoManager = null;
 
-        // KLH: 2. 构造一个 eurekaServer 内部的eurekaClient对象,用来跟其他 server 节点互相注册和通信
+        // KLH: 2.1 构造 eurekaServer 内部的eurekaClient对象,用来跟其他 server 节点互相注册和通信
         if (eurekaClient == null) {
             // KLH: instanceConfig对象是eureka-client.properties配置文件中的配置承载对象
             EurekaInstanceConfig instanceConfig = isCloud(ConfigurationManager.getDeploymentContext())
@@ -184,7 +187,7 @@ public class EurekaBootStrap implements ServletContextListener {
             applicationInfoManager = eurekaClient.getApplicationInfoManager();
         }
 
-        // KLH: 3. 构造 能感知集群的服务实例注册表
+        // KLH: 2.2 构造 能感知集群的服务实例注册表
         PeerAwareInstanceRegistry registry;
         if (isAws(applicationInfoManager.getInfo())) {
             registry = new AwsInstanceRegistry(
@@ -204,7 +207,7 @@ public class EurekaBootStrap implements ServletContextListener {
             );
         }
 
-        // KLH: 4. 构造了一个东西:peerEurekaNodes
+        // KLH: 2.3 构造 peerEurekaNodes,这是一个用来管理集群内节点的工具类,命名风格形似java.util.Collections
         PeerEurekaNodes peerEurekaNodes = getPeerEurekaNodes(
                 registry,
                 eurekaServerConfig,
@@ -213,7 +216,7 @@ public class EurekaBootStrap implements ServletContextListener {
                 applicationInfoManager
         );
 
-        // KLH: 5. 基于上文中的关键对象,构造了 eureka 服务器上下文信息
+        // KLH: 3 基于上文中构造出来的对象,构造了 eureka-server 上下文对象
         serverContext = new DefaultEurekaServerContext(
                 eurekaServerConfig,
                 serverCodecs,
@@ -225,14 +228,14 @@ public class EurekaBootStrap implements ServletContextListener {
         // KLH: 将 context 放入 holder 中,后续使用 context 时,直接从 holder中获取
         EurekaServerContextHolder.initialize(serverContext);
 
-        // KLH: 6. 初始化上下文*重要*
+        // KLH: 4. 初始化 构造出来的 server上下文: 1.维护集群内节点信息 2.根据节点信息计算心跳数,实例数
         serverContext.initialize();
         logger.info("Initialized server context");
-
         // Copy registry from neighboring eureka node
-        // KLH: 7. 从邻近的 eureka 节点中拷贝注册表,如果失败,找下一个
+        // KLH: 5. 从邻近的 eureka 节点中拷贝注册表, 返回注册的总实例数
         int registryCount = registry.syncUp();
-        // KLH: 8. 定时剔除失效服务
+
+        // KLH: 6. 定时剔除失效服务
         registry.openForTraffic(applicationInfoManager, registryCount);
 
         // Register all monitoring statistics.

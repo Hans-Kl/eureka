@@ -85,6 +85,7 @@ public class PeerEurekaNodes {
                 }
         );
         try {
+            // KLH: 解析集群内的其他节点url,并更新节点上下线信息
             updatePeerEurekaNodes(resolvePeerUrls());
             Runnable peersUpdateTask = new Runnable() {
                 @Override
@@ -97,9 +98,10 @@ public class PeerEurekaNodes {
 
                 }
             };
+            // KLH: 每隔10min定时调度一次
             taskExecutor.scheduleWithFixedDelay(
                     peersUpdateTask,
-                    serverConfig.getPeerEurekaNodesUpdateIntervalMs(),
+                    serverConfig.getPeerEurekaNodesUpdateIntervalMs(),// KLH: 默认10min
                     serverConfig.getPeerEurekaNodesUpdateIntervalMs(),
                     TimeUnit.MILLISECONDS
             );
@@ -125,6 +127,7 @@ public class PeerEurekaNodes {
 
     /**
      * Resolve peer URLs.
+     * <p> klh :返回集群内其他节点urls
      *
      * @return peer URLs with node's own URL filtered out
      */
@@ -157,11 +160,13 @@ public class PeerEurekaNodes {
             return;
         }
 
+        // KLH: 与集群内现有节点做比较,计算出是否有新上线节点或新下线节点
         Set<String> toShutdown = new HashSet<>(peerEurekaNodeUrls);
         toShutdown.removeAll(newPeerUrls);
         Set<String> toAdd = new HashSet<>(newPeerUrls);
         toAdd.removeAll(peerEurekaNodeUrls);
 
+        // KLH: 都没有,方法返回
         if (toShutdown.isEmpty() && toAdd.isEmpty()) { // No change
             return;
         }
@@ -176,6 +181,7 @@ public class PeerEurekaNodes {
                 PeerEurekaNode eurekaNode = newNodeList.get(i);
                 if (toShutdown.contains(eurekaNode.getServiceUrl())) {
                     newNodeList.remove(i);
+                    // KLH: 删除节点
                     eurekaNode.shutDown();
                 } else {
                     i++;
@@ -187,7 +193,9 @@ public class PeerEurekaNodes {
         if (!toAdd.isEmpty()) {
             logger.info("Adding new peer nodes {}", toAdd);
             for (String peerUrl : toAdd) {
-                newNodeList.add(createPeerEurekaNode(peerUrl));
+                newNodeList.add(
+                        // KLH: 增加节点
+                        createPeerEurekaNode(peerUrl));
             }
         }
 

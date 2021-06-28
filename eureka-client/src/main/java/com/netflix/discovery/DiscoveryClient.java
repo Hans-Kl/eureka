@@ -297,6 +297,9 @@ public class DiscoveryClient implements EurekaClient {
         });
     }
 
+    /**
+     *  KLH: eureka-client启动入口
+      */
     @Inject
     DiscoveryClient(ApplicationInfoManager applicationInfoManager, EurekaClientConfig config, AbstractDiscoveryClientOptionalArgs args,
                     Provider<BackupRegistry> backupRegistryProvider) {
@@ -312,7 +315,7 @@ public class DiscoveryClient implements EurekaClient {
             this.preRegistrationHandler = null;
         }
 
-        // KLH: 1. 从配置管理器中获取配置,保存到实例属性中
+        // KLH: 1. 从配置管理器中获取配置,保存到对象属性中
         //------------start------------
         this.applicationInfoManager = applicationInfoManager;
         InstanceInfo myInfo = applicationInfoManager.getInfo();
@@ -338,15 +341,13 @@ public class DiscoveryClient implements EurekaClient {
         remoteRegionsRef = new AtomicReference<>(remoteRegionsToFetch.get() == null ? null : remoteRegionsToFetch.get().split(","));
         //------------end------------
 
-        // KLH: 2. 处理 eureka 服务端的集群相关配置逻辑
-        // KLH: fetchRegistry逻辑,略过
+        // KLH: 不知道是什么,暂时略过
         if (config.shouldFetchRegistry()) {
             this.registryStalenessMonitor = new ThresholdLevelsMetric(this, METRIC_REGISTRY_PREFIX + "lastUpdateSec_", new long[]{15L, 30L, 60L, 120L, 240L, 480L});
         } else {
             this.registryStalenessMonitor = ThresholdLevelsMetric.NO_OP_METRIC;
         }
 
-        // KLH: registration.enabled逻辑
         if (config.shouldRegisterWithEureka()) {
             this.heartbeatStalenessMonitor = new ThresholdLevelsMetric(this, METRIC_REGISTRATION_PREFIX + "lastHeartbeatSec_", new long[]{15L, 30L, 60L, 120L, 240L, 480L});
         } else {
@@ -355,7 +356,7 @@ public class DiscoveryClient implements EurekaClient {
 
         logger.info("Initializing Eureka in region {}", clientConfig.getRegion());
 
-        // KLH: 3. eureka服务端以单机方式启动时,设置这两个参数为 false,方法提前返回
+        // KLH: 2. eureka服务端以单机方式启动: 设置这两个参数为 false,方法将提前返回
         if (!config.shouldRegisterWithEureka() && !config.shouldFetchRegistry()) {
             logger.info("Client configured to neither register nor query for data.");
             scheduler = null;
@@ -376,9 +377,8 @@ public class DiscoveryClient implements EurekaClient {
             return;  // no need to setup up an network tasks and we are done
         }
 
-        // KLH: 4.eurekaClient 以集群方式正常启动,初始化维护通信机制的资源,包括线程池等
-        //------------start------------
         try {
+            // KLH: 3.eurekaClient 以普通方式启动: 初始化三个线程池
             // default size of 2 - 1 each for heartbeat and cacheRefresh
             scheduler = Executors.newScheduledThreadPool(2,
                     new ThreadFactoryBuilder()
@@ -404,7 +404,7 @@ public class DiscoveryClient implements EurekaClient {
                             .build()
             );  // use direct handoff
 
-            // KLH: 构造 client 与 server 网络通信的组件,初始化相关通信参数
+            // KLH: 4. 构造 client 与 server 网络通信的组件,初始化相关通信参数
             eurekaTransport = new EurekaTransport();
             scheduleServerEndpointTask(eurekaTransport, args);
 
@@ -421,9 +421,8 @@ public class DiscoveryClient implements EurekaClient {
         } catch (Throwable e) {
             throw new RuntimeException("Failed to initialize DiscoveryClient!", e);
         }
-        //------------end------------
 
-        // KLH: 5. 拉取注册表核心逻辑,如果抓取失败了,则从备份注册表中拉取
+        // KLH: 5. 服务发现: 拉取注册表核心逻辑,如果抓取失败了,则从备份注册表中拉取
         if (clientConfig.shouldFetchRegistry() && !fetchRegistry(false)) {
             fetchRegistryFromBackup();
         }
@@ -432,7 +431,7 @@ public class DiscoveryClient implements EurekaClient {
         if (this.preRegistrationHandler != null) {
             this.preRegistrationHandler.beforeRegistration();
         }
-        // KLH: 6. 初始化定时调度任务,*重要*,包括:1. 定时获取增量注册表;2. 延迟向server注册
+        // KLH: 6. 使用前面构造出来的线程池,执行定时调度任务,包括: 1.定时获取增量注册表; 2.延时向server进行服务注册
         initScheduledTasks();
 
         try {
@@ -838,8 +837,10 @@ public class DiscoveryClient implements EurekaClient {
     boolean renew() {
         EurekaHttpResponse<InstanceInfo> httpResponse;
         try {
+            // KLH: 发送续约心跳
             httpResponse = eurekaTransport.registrationClient.sendHeartBeat(instanceInfo.getAppName(), instanceInfo.getId(), instanceInfo, null);
             logger.debug("{} - Heartbeat status: {}", PREFIX + appPathIdentifier, httpResponse.getStatusCode());
+            // KLH: 如果server接口返回404,则重新注册
             if (httpResponse.getStatusCode() == 404) {
                 REREGISTER_COUNTER.increment();
                 logger.info("{} - Re-registering apps/{}", PREFIX + appPathIdentifier, instanceInfo.getAppName());
@@ -889,10 +890,10 @@ public class DiscoveryClient implements EurekaClient {
             // KLH: 将定时调度任务都停止
             cancelScheduledTasks();
 
+            // KLH: 如果注册到了server,则通知server下线
             // If APPINFO was registered
             if (applicationInfoManager != null && clientConfig.shouldRegisterWithEureka()) {
                 applicationInfoManager.setInstanceStatus(InstanceStatus.DOWN);
-                // KLH: 通知server反注册
                 unregister();
             }
 
@@ -927,7 +928,7 @@ public class DiscoveryClient implements EurekaClient {
      * Fetches the registry information.
      *
      * <p>
-     * This method tries to get only deltas after the first fetch unless there
+     * This method tries to get only deltas aftInstanceResourceer the first fetch unless there
      * is an issue in reconciling eureka server and client registry information.
      * </p>
      *
@@ -941,10 +942,10 @@ public class DiscoveryClient implements EurekaClient {
         try {
             // If the delta is disabled or if it is the first time, get all
             // applications
-            // KLH: 第一次抓取的时候结果为null <1>
+            // KLH: 1. 第一次抓取的时候结果为null
             Applications applications = getApplications();
 
-            // KLH: 判断是否全量抓取注册表 <2>
+            // KLH: 2. 判断是否全量抓取注册表
             if (clientConfig.shouldDisableDelta()
                     || (!Strings.isNullOrEmpty(clientConfig.getRegistryRefreshSingleVipAddress()))
                     || forceFullRegistryFetch
@@ -959,10 +960,10 @@ public class DiscoveryClient implements EurekaClient {
                 logger.info("Registered Applications size is zero : {}",
                         (applications.getRegisteredApplications().size() == 0));
                 logger.info("Application version is -1: {}", (applications.getVersion() == -1));
-                // KLH: 抓取全量注册表 <3>
+                // KLH: 3. 抓取全量注册表
                 getAndStoreFullRegistry();
             } else {
-                // KLH: 抓取增量注册表 <4>
+                // KLH: 4. 抓取增量注册表
                 getAndUpdateDelta(applications);
             }
             applications.setAppsHashCode(applications.getReconcileHashCode());
@@ -1087,6 +1088,7 @@ public class DiscoveryClient implements EurekaClient {
             delta = httpResponse.getEntity();
         }
 
+        // KLH: 从server拉取的增量注册表为null,则拉取全量注册表
         if (delta == null) {
             logger.warn("The server does not allow the delta revision to be applied because it is not safe. "
                     + "Hence got the full registry.");
@@ -1096,7 +1098,9 @@ public class DiscoveryClient implements EurekaClient {
             String reconcileHashCode = "";
             if (fetchRegistryUpdateLock.tryLock()) {
                 try {
+                    // KLH: 否则用从server获取来的增量注册表与本地注册表合并
                     updateDelta(delta);
+                    // KLH: 合并后用全部application信息计算出一个hashCode
                     reconcileHashCode = getReconcileHashCode(applications);
                 } finally {
                     fetchRegistryUpdateLock.unlock();
@@ -1105,12 +1109,14 @@ public class DiscoveryClient implements EurekaClient {
                 logger.warn("Cannot acquire update lock, aborting getAndUpdateDelta");
             }
             // There is a diff in number of instances for some reason
+            // KLH: 将刚刚在本地计算出的hashCode与server端返回的hashCode作对比,不相等的话说明出错了,这时候重新拉取全量注册表
             if (!reconcileHashCode.equals(delta.getAppsHashCode()) || clientConfig.shouldLogDeltaDiff()) {
                 reconcileAndLogDifference(delta, reconcileHashCode);  // this makes a remoteCall
             }
         } else {
             logger.warn("Not updating application delta as another thread is updating it already");
-            logger.debug("Ignoring delta update with apps hashcode {}, as another thread is updating it already", delta.getAppsHashCode());
+            logger.debug("Ignoring delta update with apps hashcode {}, as another thread is updating it already",
+                    delta.getAppsHashCode());
         }
     }
 
@@ -1463,6 +1469,7 @@ public class DiscoveryClient implements EurekaClient {
         }
     }
 
+    // KLH: 定时抓取增量注册表
     @VisibleForTesting
     void refreshRegistry() {
         try {
